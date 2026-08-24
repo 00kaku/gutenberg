@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Breaking Changes
+
+-   Upgrade React to v19.
+
 ### Enhancements
 
 -   Single-selection filter radio indicators stay visually 16px on narrow screens ([#83840](https://github.com/WordPress/gutenberg/pull/83840)).
