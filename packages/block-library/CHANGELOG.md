@@ -5,6 +5,7 @@
 ### Enhancements
 
 -   Navigation Link: Search every entity type from the link UI instead of only the link's own type; so a category, tag or post can be added without needing to add that specific type's navigation link block ([#83408](https://github.com/WordPress/gutenberg/pull/83408)).
+-   Navigation Link: List the blocks a Navigation allows in the link UI search results, so typing "Home" finds the Home Link block.
 
 ## 11.1.0 (2026-09-23)
 
