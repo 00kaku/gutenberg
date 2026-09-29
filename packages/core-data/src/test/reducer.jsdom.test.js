@@ -8,6 +8,7 @@ import {
 	currentUser,
 	syncUndoManagerState,
 	undoManager,
+	fieldsConfigs,
 } from '../reducer';
 
 describe( 'entities', () => {
@@ -567,5 +568,50 @@ describe( 'syncUndoManagerState', () => {
 			hasRedo: true,
 			hasUndo: false,
 		} );
+	} );
+} );
+
+describe( 'fieldsConfigs', () => {
+	it( 'returns an empty object by default', () => {
+		expect( fieldsConfigs( undefined, {} ) ).toEqual( {} );
+	} );
+
+	it( 'keys the received configs by kind, then name', () => {
+		const pageConfig = { kind: 'postType', name: 'page', fields: [] };
+		const postConfig = { kind: 'postType', name: 'post', fields: [] };
+		const state = deepFreeze( {
+			postType: { page: pageConfig },
+		} );
+
+		expect(
+			fieldsConfigs( state, {
+				type: 'RECEIVE_FIELDS_CONFIG',
+				kind: 'postType',
+				name: 'post',
+				config: postConfig,
+			} )
+		).toEqual( {
+			postType: { page: pageConfig, post: postConfig },
+		} );
+	} );
+
+	it( 'keeps entities whose kind and name join into the same string apart', () => {
+		const state = fieldsConfigs(
+			fieldsConfigs( undefined, {
+				type: 'RECEIVE_FIELDS_CONFIG',
+				kind: 'a/b',
+				name: 'c',
+				config: { fields: [ { id: 'first' } ] },
+			} ),
+			{
+				type: 'RECEIVE_FIELDS_CONFIG',
+				kind: 'a',
+				name: 'b/c',
+				config: { fields: [ { id: 'second' } ] },
+			}
+		);
+
+		expect( state[ 'a/b' ].c.fields ).toEqual( [ { id: 'first' } ] );
+		expect( state.a[ 'b/c' ].fields ).toEqual( [ { id: 'second' } ] );
 	} );
 } );

@@ -200,6 +200,24 @@ export function receiveViewConfig( kind, name, config ) {
 }
 
 /**
+ * Returns an action object used to receive the fields config of an entity.
+ *
+ * @param {string} kind   Entity kind.
+ * @param {string} name   Entity name.
+ * @param {Object} config Fields config, as returned by the `/wp/v2/fields` route.
+ *
+ * @return {Object} Action object.
+ */
+export function receiveFieldsConfig( kind, name, config ) {
+	return {
+		type: 'RECEIVE_FIELDS_CONFIG',
+		kind,
+		name,
+		config,
+	};
+}
+
+/**
  * Returns an action object used to notify core-data that the sync undo manager
  * state changed outside of the core-data reducer, e.g. The Yjs UndoManager
  * captured an undo level.

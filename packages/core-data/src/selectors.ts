@@ -19,6 +19,7 @@ import {
 } from './utils';
 import { getEntitySyncManager } from './entity-sync';
 import type * as ET from './entity-types';
+import type { FieldsConfig } from './types';
 import logEntityDeprecation from './utils/log-entity-deprecation';
 
 // This is an incomplete, high-level approximation of the State type.
@@ -53,6 +54,7 @@ export interface State {
 	syncConnectionStatuses?: Record< string, ConnectionStatus >;
 	collaborationSupported: boolean;
 	viewConfigs: Record< string, Record< string, any > >;
+	fieldsConfigs: Record< string, Record< string, FieldsConfig > >;
 }
 
 type EntityRecordKey = string | number;
@@ -1724,3 +1726,21 @@ export const getRevision = (
 
 	return getFilteredItem( item, query._fields );
 };
+
+/**
+ * Returns the fields registered on the server for the given entity, as the
+ * `/wp/v2/fields` REST API route returns them.
+ *
+ * @param state Data state.
+ * @param kind  Entity kind.
+ * @param name  Entity name.
+ *
+ * @return The fields config, or undefined if not loaded.
+ */
+export function getFieldsConfig(
+	state: State,
+	kind: string,
+	name: string
+): FieldsConfig | undefined {
+	return state.fieldsConfigs?.[ kind ]?.[ name ];
+}
