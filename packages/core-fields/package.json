@@ -45,7 +45,7 @@
 	"types": "build-types",
 	"sideEffects": false,
 	"dependencies": {
-		"@wordpress/dataviews": "file:../dataviews",
+		"@wordpress/entity-fields": "file:../entity-fields",
 		"@wordpress/fields": "file:../fields"
 	},
 	"peerDependencies": {
