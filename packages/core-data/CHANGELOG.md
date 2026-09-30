@@ -5,7 +5,7 @@
 ### Bug Fixes
 
 -   `__experimentalFetchLinkSuggestions`: add a `preferTypes` option to rank matches from one or more search types above the usual order ([#83408](https://github.com/WordPress/gutenberg/pull/83408)).
--   `__experimentalFetchLinkSuggestions`: rank results by type (content, taxonomy, post format, attachment). An unscoped search given no `perPage` returns every title holding each word typed rather than cutting the merged results, which cannot be paged through, so no matching result is lost ([#83407](https://github.com/WordPress/gutenberg/pull/83407)).
+-   `__experimentalFetchLinkSuggestions`: rank results by type (content, taxonomy, post format, attachment), and return everything the endpoints gave rather than cutting the merged results. `perPage` is now the page size asked of each type rather than a limit on what they add up to, so `page` reaches every result ([#83407](https://github.com/WordPress/gutenberg/pull/83407)).
 
 ## 8.1.0 (2026-09-23)
 
