@@ -21,9 +21,6 @@ describe( 'getSuggestionsQuery', () => {
 
 			expect( query.type ).toBeUndefined();
 			expect( query.subtype ).toBeUndefined();
-			// Naming a number would cut results from a search that cannot be
-			// paged through.
-			expect( query.perPage ).toBeUndefined();
 		}
 	);
 

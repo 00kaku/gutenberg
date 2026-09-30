@@ -33,18 +33,11 @@ export type SearchOptions = {
 	 */
 	preferTypes?: TypeOrderEntry[];
 	/**
-	 * Which page of results to return. Only meaningful for a search narrowed by `type`.
-	 * Unscoped searches across multiple types do not have paged results due to sorting
-	 * and merging results across multiple tables.
+	 * Which page of results to return.
 	 */
 	page?: number;
 	/**
-	 * The number of results to return.
-	 *
-	 * Important: perPage acts as a limiter when searching across types, as multi-type
-	 * searches do not have pagination. If left as the default, this will return up to 80 results
-	 * (20 results from each type). For a single type, perPage follows the standard
-	 * WordPress meaning of number of results per page.
+	 * Number of results to search per SearchType.
 	 */
 	perPage?: number;
 };
@@ -132,12 +125,13 @@ export default async function fetchLinkSuggestions(
 				}
 			: searchOptions;
 
-	const { type, subtype, preferTypes, page } = searchOptionsToUse;
-
-	// Naming a number is asking for no more than that; naming none is taking whatever a page
-	// holds, which an unscoped search may exceed.
-	const limit = searchOptionsToUse.perPage;
-	const perPage = limit ?? ( searchOptions.isInitialSuggestions ? 3 : 20 );
+	const {
+		type,
+		subtype,
+		preferTypes,
+		page,
+		perPage = searchOptions.isInitialSuggestions ? 3 : 20,
+	} = searchOptionsToUse;
 
 	const { disablePostFormats = false } = editorSettings;
 
@@ -257,29 +251,7 @@ export default async function fetchLinkSuggestions(
 
 	let results = responses.flat();
 	results = results.filter( ( result ) => !! result.id );
-
-	if ( searchOptions.isInitialSuggestions || ! search ) {
-		return sortResults( { results, search, preferTypes } ).slice(
-			0,
-			perPage
-		);
-	}
-
-	const sortedResults = rankResults( { results, search, preferTypes } );
-
-	// Determine how many results to return
-	//
-	// If a search is unscoped (any type), we don't want to limit it to the perPage as it might discard
-	// valid results from a lower tier (i.e. attachments). So, unscoped default searches return
-	// every title matching a word typed even if they exceed 20. Titles matching no word typed are
-	// left out: `/wp/v2/search` matches post content and excerpts too, with no way to narrow it.
-	// Explicitly passed perPage unscoped searches respect the perPage value.
-	const matches = sortedResults.filter( ( { found } ) => found > 0 );
-
-	const bounded = type || limit !== undefined;
-	const kept = bounded ? matches.slice( 0, perPage ) : matches;
-
-	return kept.map( ( { result } ) => result );
+	return sortResults( { results, search, preferTypes } );
 }
 
 /**
@@ -370,9 +342,9 @@ function getSearchType( result: SearchResult ): SearchType {
 /**
  * How much a result's type counts towards its rank.
  *
- * Earlier entries are worth more, and anything a caller prefers outranks the usual order
- * entirely. A weight rather than a band, so a title that plainly answers the search can still
- * outrank a better-placed type that barely does.
+ * Earlier entries in `TYPE_ORDER` are worth more, and anything a caller prefers outranks the usual
+ * order entirely. The comparisons before this one come first, so a title that plainly answers the
+ * search still outranks a better-placed type that barely does.
  *
  * @param result
  * @param preferTypes
@@ -461,34 +433,10 @@ function getCoverage( title: string, searchTokens: string[] ): number {
 	return ( covered / searchTokens.length ) * 10;
 }
 
-type ScoredResult = {
-	result: SearchResult;
-	/**
-	 * How many of the words typed the title holds.
-	 */
-	found: number;
-	/**
-	 * Whether the title holds what was typed as one string.
-	 */
-	contains: boolean;
-	/**
-	 * Whether the title begins with what was typed.
-	 */
-	begins: boolean;
-	/**
-	 * Where the result's type sits in the wanted order, the most wanted highest.
-	 */
-	type: number;
-	/**
-	 * How much of the search the title covers.
-	 */
-	score: number;
-};
-
 /**
- * What to rank, and how.
+ * What to sort, and how.
  */
-type RankOptions = {
+type SortOptions = {
 	results: SearchResult[];
 	search: string;
 	/**
@@ -498,36 +446,34 @@ type RankOptions = {
 };
 
 /**
- * Work out how well each result answers the query, and order them by it.
- *
- * The scores come back attached to the results, so that deciding how many to keep can read what a
- * result matched instead of working it out a second time.
+ * Sort search results by relevance to the given query.
  *
  * Sorting is necessary as we're querying multiple endpoints and merging the results. For example
  * a taxonomy title might be more relevant than a post title, but by default taxonomy results will
- * be ordered after all the (potentially irrelevant) post results.
+ * be ordered after less relevant body content matches.
  *
- * A title holding every word that was typed ranks above one holding some, which ranks above one
- * holding none — whatever their types, and wherever in the title those words sit. Holding them
- * together, as the string that was typed, comes next.
+ * Ordering is done by a series of comparisons. Let's assume a search of "coffee beans":
  *
- * The type comes after that, then whether the title begins with what was typed.
- *
- * Last is how much of the search the title covers, counting a whole word for much more than a word
- * found inside a longer one. How much of the *title* the search covers is deliberately not
- * considered, so a long title is never marked down for being long, and repeating a word never
- * makes a title a better answer.
+ * 1. Number of word matches in the title: "coffee beans" matches above "coffee" in the title with
+ *    "beans" in the body text of the post
+ * 2. Ordering of the title matches. "The best coffee beans today" will match above "For the best
+ *    coffee, you need the best beans" because of the separation between words
+ * 3. Content Type: content > taxonomies > post formats > media
+ * 4. Starting with search: "Coffee beans, lightly roasted" will rank above "The freshest coffee
+ *    beans"
+ * 5. Percentage of matched word: "cat" ranks the title "Cats" above the title "Caterpillar" since
+ *    cat is 75% of "Cats" and only 27% of "Caterpillar"
  *
  * @param options
  * @param options.results
  * @param options.search
  * @param options.preferTypes
  */
-function rankResults( {
+export function sortResults( {
 	results,
 	search,
 	preferTypes,
-}: RankOptions ): ScoredResult[] {
+}: SortOptions ): SearchResult[] {
 	const searchTokens = tokenize( search );
 
 	const scored = results.map( ( result ) => ( {
@@ -556,27 +502,7 @@ function rankResults( {
 			b.score - a.score
 	);
 
-	return scored;
-}
-
-/**
- * Sort search results by relevance to the given query.
- *
- * See `rankResults` for the order this puts them in.
- *
- * @param options
- * @param options.results
- * @param options.search
- * @param options.preferTypes
- */
-export function sortResults( {
-	results,
-	search,
-	preferTypes,
-}: RankOptions ): SearchResult[] {
-	return rankResults( { results, search, preferTypes } ).map(
-		( { result } ) => result
-	);
+	return scored.map( ( { result } ) => result );
 }
 
 /**
