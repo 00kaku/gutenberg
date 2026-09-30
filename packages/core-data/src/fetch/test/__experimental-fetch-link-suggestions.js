@@ -93,32 +93,6 @@ vi.mock( '@wordpress/api-fetch', () => ( {
 						type: 'category',
 					} ) )
 				);
-			case '/wp/v2/search?search=few&per_page=20&type=post':
-				return Promise.resolve(
-					Array.from( { length: 5 }, ( _, index ) => ( {
-						id: 300 + index,
-						title: `Few ${ index }`,
-						url: `http://wordpress.local/few-${ index }/`,
-						type: 'post',
-						subtype: 'page',
-					} ) )
-				);
-			case '/wp/v2/search?search=few&per_page=20&type=term':
-				return Promise.resolve( [
-					...Array.from( { length: 30 }, ( _, index ) => ( {
-						id: 400 + index,
-						title: `Few ${ index }`,
-						url: `http://wordpress.local/few-${ index }/`,
-						type: 'category',
-					} ) ),
-					// Matched on a body, so the title holds nothing typed.
-					...Array.from( { length: 10 }, ( _, index ) => ( {
-						id: 450 + index,
-						title: `Unrelated ${ index }`,
-						url: `http://wordpress.local/unrelated-${ index }/`,
-						type: 'category',
-					} ) ),
-				] );
 			case '/wp/v2/search?search=few%20notes&per_page=20&type=post':
 				return Promise.resolve( [
 					...Array.from( { length: 5 }, ( _, index ) => ( {
@@ -182,6 +156,7 @@ vi.mock( '@wordpress/api-fetch', () => ( {
 			case '/wp/v2/media?search=few%20notes&per_page=20':
 			case '/wp/v2/search?search=many&per_page=20&type=post-format':
 			case '/wp/v2/media?search=many&per_page=20':
+				return Promise.resolve( [] );
 			case '/wp/v2/search?search=brewing&per_page=20&type=term':
 				return Promise.resolve( [
 					...Array.from( { length: 3 }, ( _, index ) => ( {
@@ -197,9 +172,6 @@ vi.mock( '@wordpress/api-fetch', () => ( {
 						type: 'category',
 					} ) ),
 				] );
-			case '/wp/v2/search?search=few&per_page=20&type=post-format':
-			case '/wp/v2/media?search=few&per_page=20':
-				return Promise.resolve( [] );
 			case '/wp/v2/search?search=&per_page=3&type=post':
 				return Promise.resolve(
 					Array.from( { length: 3 }, ( _, index ) => ( {
@@ -392,16 +364,20 @@ describe( 'fetchLinkSuggestions', () => {
 		);
 	} );
 
-	it( 'returns no more than the caller asked for', () => {
+	it( 'sends the per page to each request without cutting the merge', () => {
+		// Each request is asked for 20. The endpoints answer with 25 titles
+		// holding the word and 10 matched on a body, and all 35 come back: an
+		// unscoped search cannot be paged through, so `perPage` sizes each
+		// request rather than bounding what they add up to.
 		return fetchLinkSuggestions( 'many', { perPage: 20 } ).then(
-			( suggestions ) => expect( suggestions ).toHaveLength( 20 )
+			( suggestions ) => expect( suggestions ).toHaveLength( 35 )
 		);
 	} );
 
-	it( 'leaves out titles holding nothing that was typed, ordered by best matches first', () => {
-		// 5 titles hold both words typed and 5 hold one of them. The 30
-		// holding neither were matched on a body, so they are not offered at
-		// all, and the whole-word matches come before the partial ones.
+	it( 'ranks titles by how much of the search they hold, content matches last', () => {
+		// 5 titles hold both words typed, 5 hold one of them, and 30 hold
+		// neither because WordPress matched their body. All are offered, in
+		// that order.
 		const startsWith = ( titles, prefix ) =>
 			titles.every( ( title ) => title.startsWith( prefix ) );
 
@@ -409,19 +385,24 @@ describe( 'fetchLinkSuggestions', () => {
 			( suggestions ) => {
 				const titles = suggestions.map( ( { title } ) => title );
 
-				expect( titles ).toHaveLength( 10 );
+				expect( titles ).toHaveLength( 40 );
 				expect( startsWith( titles.slice( 0, 5 ), 'Few Notes' ) ).toBe(
 					true
 				);
-				expect( startsWith( titles.slice( 5 ), 'Notes' ) ).toBe( true );
+				expect( startsWith( titles.slice( 5, 10 ), 'Notes' ) ).toBe(
+					true
+				);
+				expect( startsWith( titles.slice( 10 ), 'Unrelated' ) ).toBe(
+					true
+				);
 			}
 		);
 	} );
 
 	it( 'keeps every title matching a word typed, past the per page limit on default searches', () => {
-		// 5 titles hold both words typed and 20 hold one of them, so 25 match
-		// and none of them can be cut, though the limit is 20. The 10 holding
-		// neither word are what the cut takes.
+		// 5 titles hold both words typed, 20 hold one of them and 10 hold
+		// neither. Nothing is cut, though the default limit is 20, and the
+		// content matches come last.
 		const countStartingWith = ( titles, prefix ) =>
 			titles.filter( ( title ) => title.startsWith( prefix ) ).length;
 
@@ -429,38 +410,42 @@ describe( 'fetchLinkSuggestions', () => {
 			( suggestions ) => {
 				const titles = suggestions.map( ( { title } ) => title );
 
-				expect( titles ).toHaveLength( 25 );
+				expect( titles ).toHaveLength( 35 );
 				expect( countStartingWith( titles, 'Tea Leaves' ) ).toBe( 5 );
 				expect( countStartingWith( titles, 'Leaves' ) ).toBe( 20 );
-				expect( countStartingWith( titles, 'Unrelated' ) ).toBe( 0 );
+				expect(
+					countStartingWith( titles.slice( 25 ), 'Unrelated' )
+				).toBe( 10 );
 			}
 		);
 	} );
 
-	it( 'leaves out titles holding nothing typed on a scoped search too', () => {
+	it( 'ranks content matches last on a scoped search too', () => {
 		// The endpoint offers 3 titles holding the word and 10 matched on a
-		// body. Only the 3 are offered, though `perPage` allows 20.
+		// body. All 13 fit inside `perPage`, with the 3 leading.
 		return fetchLinkSuggestions( 'brewing', {
 			type: 'term',
 			perPage: 20,
-		} ).then( ( suggestions ) => expect( suggestions ).toHaveLength( 3 ) );
-	} );
+		} ).then( ( suggestions ) => {
+			const titles = suggestions.map( ( { title } ) => title );
 
-	it( 'specific type searches respect the per page limit', () => {
-		// One request, so `perPage` bounds it and `page` can page through the
-		// rest. The endpoint offers 30 here; only 20 are returned.
-		return fetchLinkSuggestions( 'few', {
-			type: 'term',
-			perPage: 20,
-		} ).then( ( suggestions ) => expect( suggestions ).toHaveLength( 20 ) );
+			expect( titles ).toHaveLength( 13 );
+			expect(
+				titles
+					.slice( 0, 3 )
+					.every( ( title ) => title.startsWith( 'Brewing' ) )
+			).toBe( true );
+		} );
 	} );
 
 	describe( 'Initial search suggestions', () => {
-		it( 'limits unscoped initial suggestions to the per page count', () => {
+		it( 'asks every type for its own initial suggestions', () => {
+			// `perPage` is per type, so the default of 3 for initial
+			// suggestions asks each of them for 3. Media has none here.
 			return fetchLinkSuggestions( '', {
 				isInitialSuggestions: true,
 			} ).then( ( suggestions ) =>
-				expect( suggestions ).toHaveLength( 3 )
+				expect( suggestions ).toHaveLength( 9 )
 			);
 		} );
 
@@ -470,13 +455,16 @@ describe( 'fetchLinkSuggestions', () => {
 			return fetchLinkSuggestions( '', {
 				isInitialSuggestions: true,
 				preferTypes: [ { type: 'term', subtype: 'category' } ],
-			} ).then( ( suggestions ) =>
-				expect( suggestions.map( ( { title } ) => title ) ).toEqual( [
+			} ).then( ( suggestions ) => {
+				const titles = suggestions.map( ( { title } ) => title );
+
+				expect( titles ).toHaveLength( 9 );
+				expect( titles.slice( 0, 3 ) ).toEqual( [
 					'Initial Category 0',
 					'Initial Category 1',
 					'Initial Category 2',
-				] )
-			);
+				] );
+			} );
 		} );
 
 		it( 'initial search suggestions limits results', () => {
