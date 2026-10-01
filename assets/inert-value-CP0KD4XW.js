@@ -1,0 +1,1 @@
+import{n as r}from"./rolldown-runtime-DiifJuVD.js";import{t}from"./react-BoNh7UIS.js";function inertValue(r){return e>=19?r:r?"true":void 0}var n,e;function init_inert_value(){return(init_inert_value=r(()=>{n=t(),e=parseInt(n.version,10)}))()}export{init_inert_value as n,inertValue as t};
