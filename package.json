@@ -109,6 +109,9 @@
 		"lerna": {
 			"js-yaml": "4.3.2",
 			"pacote": "21.5.1"
+		},
+		"use-memo-one": {
+			"react": "^19.3.0"
 		}
 	},
 	"scripts": {
